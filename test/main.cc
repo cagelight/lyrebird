@@ -14,7 +14,7 @@
 
 #define ALERR do { ALenum err; if ((err = alGetError()) != AL_NO_ERROR) throw std::runtime_error { asterales::strf("[%s] OpenAL error occurred, code (%i)", _as_here, err) }; } while (0);
 
-static constexpr size_t sample_rate = 44100;
+static constexpr size_t sample_rate = 192000;
 static constexpr size_t buffer_msec = 50;
 static constexpr size_t buffer_width = 2;
 static constexpr size_t buffer_samples = (sample_rate * buffer_msec) / 1000;
@@ -42,7 +42,8 @@ struct test_generator {
 		l->fill_buffer(data_l);
 		r->fill_buffer(data_r);
 		
-		lyrebird::sample_vector_t idata = lyrebird::interleve(data_l, data_r);
+		lyrebird::sample_vector_t idata = lyrebird::interleave(data_l, data_r);
+		lyrebird::attenuate(idata, 1.0 / 8.0);
 		
 		if constexpr (buffer_width == 1) {
 			auto cdata = lyrebird::compress_8(idata);
@@ -71,7 +72,7 @@ static void run_gen(test_generator & gen) {
 	alGetError();
 	
 	ALuint source = 0;
-	std::array<ALuint, 4> buffers;
+	std::array<ALuint, 8> buffers;
 	
 	alGenSources(1, &source);
 	ALERR
@@ -102,7 +103,7 @@ static void run_gen(test_generator & gen) {
 			
 		}
 		
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		std::this_thread::sleep_for(std::chrono::milliseconds(buffer_msec * 2));
 	}
 	
 	alDeleteSources(1, &source);
@@ -112,16 +113,14 @@ static void run_gen(test_generator & gen) {
 	alcCloseDevice(device);
 }
 
-inline static lyrebird::gen_ptr test_gen_l(lyrebird::settings_ptr settings) {
-	auto osc = lyrebird::create<lyrebird::sawtooth>(settings); 
-	osc->frequency_modulator = lyrebird::create_modulator<lyrebird::sawtooth>(80, 160, settings, 2);
-	return osc;
-}
-
-inline static lyrebird::gen_ptr test_gen_r(lyrebird::settings_ptr settings) {
-	auto osc = lyrebird::create<lyrebird::sawtooth>(settings); 
-	osc->frequency_modulator = lyrebird::create_modulator<lyrebird::sawtooth>(40, 80, settings, 2);
-	return osc;
+inline static lyrebird::gen_ptr test_gen(lyrebird::settings_ptr settings) {
+	
+	auto mix = lyrebird::create<lyrebird::mixer>(settings);
+	for (int i = 0; i < 2; i++)
+		mix->add_generator<lyrebird::sine>()
+			.frequency_modulator = lyrebird::create_modulator<lyrebird::simplex>(40, 860, settings, 0.5);
+			
+	return mix;
 }
 
 int main() {
@@ -131,8 +130,8 @@ int main() {
 	settings->sample_rate = sample_rate;
 	
 	test_generator gen {
-		.l = test_gen_l(settings),
-		.r = test_gen_r(settings)
+		.l = test_gen(settings),
+		.r = test_gen(settings)
 	};
 	
 	run_gen(gen);

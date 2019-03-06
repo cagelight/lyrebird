@@ -20,11 +20,21 @@ namespace lyrebird {
 	inline settings_ptr create_settings() { return std::make_shared<settings>(); }
 	
 	// ================================================================
+	// UTILITY
+	// ================================================================
 	
-	sample_vector_t interleve(sample_vector_t const & a, sample_vector_t const & b);
+	sample_vector_t interleave(sample_vector_t const & a, sample_vector_t const & b);
 	std::vector<uint8_t> compress_8(sample_vector_t const & data);
 	std::vector<int16_t> compress_16(sample_vector_t const & data);
 	
+	inline void attenuate(sample_vector_t & data, sample_t mul) {
+		for (size_t i = 0; i < data.size(); i++) {
+			data[i] = data[i] * mul;
+		}
+	}
+	
+	// ================================================================
+	// GENERATOR
 	// ================================================================
 
 	struct generator {
@@ -40,6 +50,10 @@ namespace lyrebird {
 	inline std::unique_ptr<T> create(Args ... args) {
 		return std::make_unique<T>(args ...);
 	}
+	
+	// ================================================================
+	// MODULATOR
+	// ================================================================
 	
 	struct modulator {
 		gen_ptr gen;
@@ -69,6 +83,32 @@ namespace lyrebird {
 	}
 	
 	// ================================================================
+	// MIXER
+	// ================================================================
+	
+	struct mixer : public generator {
+		
+		mixer(settings_ptr settings) : generator(settings) {}
+		
+		virtual void fill_buffer(sample_vector_t & data) override;
+		
+		void add_generator(gen_ptr && gen) {
+			gens.push_back(std::forward<gen_ptr &&>(gen));
+		}
+		
+		template <typename T, typename ... Args>
+		T & add_generator(Args ... args) {
+			auto uptr = create<T>(settings, args ...);
+			T & dref = *uptr;
+			add_generator(std::move(uptr));
+			return dref;
+		}
+		
+	private:
+		std::vector<gen_ptr> gens;
+	};
+	
+	// ================================================================
 	// BASIC OSCILLATION
 	// ================================================================
 	
@@ -84,23 +124,52 @@ namespace lyrebird {
 	struct sawtooth : oscillator {
 		sawtooth(settings_ptr settings, sample_t freq = default_frequency) : oscillator(settings, freq) {}
 		
-		virtual void fill_buffer(sample_vector_t & data) override {
-			
-			sample_vector_t freqs;
-			freqs.resize(data.size());
-			if (frequency_modulator)
-				frequency_modulator->fill_buffer(freqs);
-			else
-				std::fill(freqs.begin(), freqs.end(), frequency);
-			
-			for(size_t i = 0; i < data.size(); i++) {
-				data[i] = c;
-				c += (freqs[i] / settings->sample_rate) * 2;
-				while (c > 1) c -= 2;
-			}
-		}
+		virtual void fill_buffer(sample_vector_t & data) override;
 	private:
 		sample_t c = 0;
+	};
+	
+	struct square : oscillator {
+		square(settings_ptr settings, sample_t freq = default_frequency) : oscillator(settings, freq) {}
+		
+		virtual void fill_buffer(sample_vector_t & data) override;
+	private:
+		sample_t c = 0;
+	};
+	
+	struct triangle : oscillator {
+		triangle(settings_ptr settings, sample_t freq = default_frequency) : oscillator(settings, freq) {}
+		
+		virtual void fill_buffer(sample_vector_t & data) override;
+	private:
+		sample_t c = 0;
+	};
+	
+	struct sine : oscillator {
+		sine(settings_ptr settings, sample_t freq = default_frequency) : oscillator(settings, freq) {}
+		
+		virtual void fill_buffer(sample_vector_t & data) override;
+	private:
+		sample_t c = 0;
+	};
+	
+	// ================================================================
+	// NOISE
+	// ================================================================
+	
+	struct white_noise : generator {
+		white_noise(settings_ptr settings) : generator(settings) {}
+		virtual void fill_buffer(sample_vector_t & data) override;
+	};
+	
+	struct simplex : public generator {
+		sample_t frequency;
+		simplex(settings_ptr settings, sample_t frequency = default_frequency);
+		~simplex();
+		virtual void fill_buffer(sample_vector_t & data) override;
+	private:
+		struct impl_t;
+		std::unique_ptr<impl_t> impl;
 	};
 	
 	// ================================================================

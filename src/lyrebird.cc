@@ -11,7 +11,7 @@ inline constexpr T clamp(T val, T min, T max) {
 	return val;
 }
 
-sample_vector_t lyrebird::interleve(sample_vector_t const & a, sample_vector_t const & b) {
+sample_vector_t lyrebird::interleave(sample_vector_t const & a, sample_vector_t const & b) {
 	if (a.size() != b.size()) throw buffer_exception {};
 	
 	sample_vector_t ret;
